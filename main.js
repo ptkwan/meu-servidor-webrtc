@@ -24,9 +24,7 @@ function createWindow() {
     
     // Carrega a interface
     mainWindow.loadFile('index.html');
-    
-    // FORÇA O PAINEL DE DESENVOLVEDOR (Console) A ABRIR AUTOMATICAMENTE
-    mainWindow.webContents.openDevTools(); 
+
 }
 
 app.whenReady().then(createWindow);
