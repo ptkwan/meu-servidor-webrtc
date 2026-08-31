@@ -10,21 +10,31 @@ const io = new Server(server, {
   cors: { origin: "*" }
 });
 
-// Armazenar salas: roomId -> Set de socket ids
+// Estrutura: roomName -> Set de socket ids
 const rooms = new Map();
+
+// Função para obter a lista de salas (apenas nomes)
+function getRoomList() {
+  return Array.from(rooms.keys());
+}
 
 io.on('connection', (socket) => {
   console.log('Cliente conectado:', socket.id);
 
-  socket.on('join-room', ({ roomId, username }) => {
-    socket.join(roomId);
-    socket.data.username = username || 'Anônimo';
-    socket.data.room = roomId;
+  // Quando o cliente pedir a lista de salas
+  socket.on('get-rooms', () => {
+    socket.emit('rooms-list', getRoomList());
+  });
 
+  socket.on('join-room', ({ roomId, username }) => {
+    // Se a sala não existir, cria
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Set());
     }
     rooms.get(roomId).add(socket.id);
+    socket.join(roomId);
+    socket.data.username = username || 'Anônimo';
+    socket.data.room = roomId;
 
     // Atualizar lista de usuários para todos na sala
     const users = Array.from(rooms.get(roomId)).map(id => ({
@@ -35,6 +45,9 @@ io.on('connection', (socket) => {
 
     // Notificar entrada
     socket.to(roomId).emit('user-connected', { userId: socket.id, userName: socket.data.username });
+
+    // **ATUALIZAR LISTA DE SALAS PARA TODOS**
+    io.emit('rooms-update', getRoomList());
   });
 
   socket.on('start-sharing', () => {
@@ -64,9 +77,13 @@ io.on('connection', (socket) => {
     const room = socket.data.room;
     if (room && rooms.has(room)) {
       rooms.get(room).delete(socket.id);
+      // Se a sala ficou vazia, removê-la
       if (rooms.get(room).size === 0) {
         rooms.delete(room);
+        // Notificar todos que a sala foi removida
+        io.emit('rooms-update', getRoomList());
       } else {
+        // Atualizar lista de usuários da sala
         const users = Array.from(rooms.get(room)).map(id => ({
           id,
           name: io.sockets.sockets.get(id)?.data.username || 'Anônimo'
