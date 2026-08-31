@@ -24,6 +24,7 @@ function createWindow() {
     
     // Carrega a interface
     mainWindow.loadFile('index.html');
+    
 
 }
 
