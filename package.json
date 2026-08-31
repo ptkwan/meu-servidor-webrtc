@@ -1,0 +1,34 @@
+{
+  "name": "screenshare-pro",
+  "version": "1.0.0",
+  "description": "App de compartilhamento de tela em rede local",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dev": "concurrently \"npm run server\" \"npm run start\""
+  },
+  "build": {
+    "appId": "com.seu-nome.screensharepro",
+    "productName": "ScreenShare Pro",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1",
+    "concurrently": "^8.2.2"
+  },
+  "devDependencies": {
+    "electron": "^24.0.0",
+    "electron-builder": "^24.4.0"
+  }
+}

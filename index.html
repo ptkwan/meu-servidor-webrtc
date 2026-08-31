@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * ws: wss:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScreenShare Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; height: 100vh; overflow: hidden; }
+        .video-wrapper { position: relative; width: 100%; height: 100%; background: #18181b; border-radius: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 1px solid #27272a; }
+        .video-wrapper video { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.4s ease; }
+        .video-wrapper video.active { opacity: 1; }
+        .video-label { position: absolute; bottom: 16px; left: 16px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 255, 255, 0.1); z-index: 10; }
+        .video-status { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; z-index: 5; }
+        @keyframes pulse-ring { 0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        .recording-indicator { width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; animation: pulse-ring 2s infinite; }
+        .control-btn { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; cursor: pointer; transition: all 0.2s ease; }
+        .control-btn:hover { background-color: #3f3f46; transform: translateY(-2px); }
+        .control-btn.active-state { background-color: #3b82f6; border-color: #60a5fa; color: white; }
+        .control-btn.danger-state { background-color: #ef4444; border-color: #f87171; color: white; }
+        .control-btn.danger-state:hover { background-color: #dc2626; }
+        .toast { position: fixed; top: 20px; right: -300px; background: #18181b; border-left: 4px solid #3b82f6; padding: 16px 20px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); transition: right 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55); z-index: 100; display: flex; align-items: center; gap: 12px; }
+        .toast.show { right: 20px; }
+        .screen-option:hover { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #18181b; }
+        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+    </style>
+</head>
+<body class="flex flex-col">
+
+    <!-- NOVO MODAL: Sem URL, com Lista de Salas -->
+    <div id="connection-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4">
+            <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-users-three text-blue-500"></i> Bem-vindo</h2>
+            
+            <div id="discovery-status" class="text-sm text-yellow-500 flex items-center gap-2 bg-yellow-500/10 p-2 rounded border border-yellow-500/20">
+                <i class="ph ph-spinner-gap animate-spin"></i> Conectando ao servidor...
+            </div>
+
+            <input type="text" id="input-username" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Digite seu nome (Opcional)">
+
+            <div class="border-t border-zinc-800 pt-4 mt-2">
+                <h3 class="text-sm font-semibold text-zinc-400 mb-2">Salas Ativas</h3>
+                
+                <div id="rooms-list-container" class="flex flex-col gap-2 max-h-32 overflow-y-auto mb-4 bg-zinc-950 rounded-lg p-2 border border-zinc-800 min-h-[60px]">
+                    <!-- Salas aparecerão aqui (vazio por enquanto) -->
+                </div>
+
+                <div class="flex gap-2">
+                    <input type="text" id="input-new-room" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Nome da nova sala" disabled>
+                    <button id="btn-create-room" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50" disabled>Criar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Seleção de Tela (MANTIDO) -->
+    <div id="screen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
+        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[700px] max-w-[90vw] shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-monitor text-blue-500"></i> Selecione o que compartilhar</h2>
+                <button id="btn-close-screen-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
+            </div>
+            <div id="sources-list" class="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-[60vh] overflow-y-auto p-2"></div>
+        </div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md z-20">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-lg"><i class="ph-fill ph-monitor-play"></i></div>
+            <h1 class="text-lg font-semibold tracking-wide">ScreenShare Pro</h1>
+        </div>
+        <div class="flex items-center gap-4 text-sm text-zinc-400">
+            <div id="connection-status" class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-red-500" id="status-dot"></div>
+                <span id="status-text">Desconectado</span>
+            </div>
+            <span id="current-time" class="font-mono bg-zinc-900 px-3 py-1 rounded-md border border-zinc-800">00:00</span>
+        </div>
+    </header>
+
+    <!-- MAIN -->
+    <main class="flex-1 p-4 md:p-6 flex gap-6 min-h-0 relative">
+        <div class="flex-1 h-full flex flex-col relative min-w-0">
+            <div class="video-wrapper" id="main-video-wrapper">
+                <div class="video-status" id="empty-state">
+                    <div class="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center text-4xl text-zinc-500 mb-2 border border-zinc-700">
+                        <i class="ph ph-screencast"></i>
+                    </div>
+                    <h2 class="text-xl font-medium text-zinc-200">Pronto para compartilhar</h2>
+                    <p class="text-sm text-zinc-500 max-w-xs">Clique no botão de compartilhamento abaixo.</p>
+                </div>
+                <video id="shared-screen" autoplay playsinline></video>
+                <div class="video-label hidden" id="video-label">
+                    <div class="recording-indicator"></div>
+                    <span id="video-label-text">Sua tela está sendo compartilhada</span>
+                </div>
+            </div>
+        </div>
+
+        <aside class="w-72 h-full bg-zinc-900/50 border border-zinc-800 rounded-xl flex flex-col flex-shrink-0 hidden md:flex">
+            <div class="h-14 border-b border-zinc-800 flex items-center justify-between px-4">
+                <h3 class="font-semibold text-sm text-zinc-200">Participantes (<span id="user-count">0</span>)</h3>
+                <i class="ph ph-users text-zinc-400 text-lg"></i>
+            </div>
+            <div id="users-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2"></div>
+        </aside>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="flex-shrink-0 h-24 border-t border-zinc-800 bg-zinc-950 flex items-center justify-center gap-4 px-6 z-20 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        <button class="control-btn mx-2 w-16 h-16 bg-blue-600 border-blue-500 hover:bg-blue-500 text-white" id="btn-share" title="Compartilhar Tela"><i class="ph ph-screencast text-3xl"></i></button>
+        <button class="control-btn danger-state ml-4 w-16 rounded-2xl" id="btn-leave" title="Sair da Reunião"><i class="ph ph-phone-disconnect text-2xl"></i></button>
+    </footer>
+
+    <div id="toast" class="toast"><i id="toast-icon" class="ph-fill ph-info text-2xl text-blue-500"></i><div><h4 id="toast-title" class="font-semibold text-sm">Notificação</h4><p id="toast-msg" class="text-xs text-zinc-400">Mensagem.</p></div></div>
+
+    <script>
+        // ============================================================
+        // TODO O CÓDIGO JAVASCRIPT FOI ENVOLVIDO EM DOMContentLoaded
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // ==========================================
+            // CONEXÃO COM O SERVIDOR (Socket.IO)
+            // ==========================================
+            const socket = io('http://localhost:3000', {
+                autoConnect: true,
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000
+            });
+
+            // Referências DOM
+            const videoElement = document.getElementById('shared-screen');
+            const emptyState = document.getElementById('empty-state');
+            const videoLabel = document.getElementById('video-label');
+            const btnShare = document.getElementById('btn-share');
+            const timeDisplay = document.getElementById('current-time');
+            const screenModal = document.getElementById('screen-modal');
+            const sourcesList = document.getElementById('sources-list');
+            const usersListEl = document.getElementById('users-list');
+            const userCountEl = document.getElementById('user-count');
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            const discoveryStatus = document.getElementById('discovery-status');
+            const inputUsername = document.getElementById('input-username');
+            const inputNewRoom = document.getElementById('input-new-room');
+            const btnCreateRoom = document.getElementById('btn-create-room');
+
+            // Variáveis de estado
+            let isSharing = false;
+            let localStream = null;
+            let mySessionId = null;
+            let currentRoom = null;
+            const peers = {};
+            const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+            // ==========================================
+            // RELÓGIO
+            // ==========================================
+            setInterval(() => {
+                timeDisplay.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            }, 1000);
+
+            // ==========================================
+            // TOAST
+            // ==========================================
+            let toastTimeout;
+            function showToast(title, message, type = 'info') {
+                const toast = document.getElementById('toast');
+                document.getElementById('toast-title').textContent = title;
+                document.getElementById('toast-msg').textContent = message;
+                document.getElementById('toast-icon').className = type === 'error' ? 'ph-fill ph-warning-circle text-2xl text-red-500' : 'ph-fill ph-info text-2xl text-blue-500';
+                toast.style.borderLeftColor = type === 'error' ? '#ef4444' : '#3b82f6';
+                toast.classList.add('show');
+                clearTimeout(toastTimeout);
+                toastTimeout = setTimeout(() => toast.classList.remove('show'), 4000);
+            }
+
+            // ==========================================
+            // EVENTOS DO SOCKET
+            // ==========================================
+            socket.on('connect', () => {
+                discoveryStatus.innerHTML = `<i class="ph ph-check-circle"></i> Conectado ao servidor!`;
+                discoveryStatus.className = "text-sm text-green-500 flex items-center gap-2 bg-green-500/10 p-2 rounded border border-green-500/20";
+                inputNewRoom.disabled = false;
+                btnCreateRoom.disabled = false;
+                showToast('Conectado', 'Conectado ao servidor de sinalização.');
+            });
+
+            socket.on('connect_error', (err) => {
+                discoveryStatus.innerHTML = `<i class="ph ph-warning-circle"></i> Erro: servidor offline?`;
+                discoveryStatus.className = "text-sm text-red-500 flex items-center gap-2 bg-red-500/10 p-2 rounded border border-red-500/20";
+                showToast('Erro de conexão', 'Não foi possível conectar ao servidor. Verifique se ele está rodando.', 'error');
+            });
+
+            socket.on('welcome', (payload) => {
+                mySessionId = payload;
+            });
+
+            socket.on('update-user-list', (users) => {
+                userCountEl.textContent = users.length;
+                usersListEl.innerHTML = '';
+                users.forEach(u => {
+                    const isMe = u.id === mySessionId;
+                    const initial = u.name.charAt(0).toUpperCase();
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-3 p-2 rounded-lg bg-zinc-800/40 border border-zinc-700/50';
+                    div.innerHTML = `
+                        <div class="w-8 h-8 rounded-full ${isMe ? 'bg-blue-600' : 'bg-zinc-600'} flex items-center justify-center text-xs font-bold text-white">${initial}</div>
+                        <span class="text-sm text-zinc-300 truncate w-full">${u.name} ${isMe ? '<span class="text-zinc-500 text-xs">(Você)</span>' : ''}</span>
+                    `;
+                    usersListEl.appendChild(div);
+                });
+            });
+
+            socket.on('user-connected', ({ userId, userName }) => {
+                showToast('Novo Participante', `${userName} entrou.`);
+                if (isSharing) createOffer(userId);
+            });
+
+            socket.on('broadcaster-started', ({ userId }) => {
+                showToast('Aviso', 'Alguém começou a compartilhar a tela.');
+                socket.emit('request-stream', { userId });
+            });
+
+            socket.on('viewer-requested', (viewerId) => {
+                if (isSharing) createOffer(viewerId);
+            });
+
+            socket.on('offer', ({ caller, sdp }) => handleOffer({ caller, sdp }));
+            socket.on('answer', ({ answerer, sdp }) => handleAnswer({ answerer, sdp }));
+            socket.on('ice-candidate', ({ sender, candidate }) => handleCandidate({ sender, candidate }));
+            socket.on('user-disconnected', (userId) => {
+                if (peers[userId]) {
+                    peers[userId].close();
+                    delete peers[userId];
+                }
+            });
+
+            // ==========================================
+            // ENTRAR NA SALA (botão Criar)
+            // ==========================================
+            btnCreateRoom.addEventListener('click', () => {
+                const roomName = inputNewRoom.value.trim();
+                const myUsername = inputUsername.value.trim() || 'Participante';
+                if (!roomName) return showToast('Atenção', 'Digite o nome da sala', 'error');
+
+                document.getElementById('connection-modal').classList.add('hidden');
+                currentRoom = roomName;
+                statusDot.className = 'w-2 h-2 rounded-full bg-green-500';
+                statusText.textContent = currentRoom;
+                showToast('Conectado', `Bem-vindo à sala: ${currentRoom}`);
+
+                socket.emit('join-room', { roomId: currentRoom, username: myUsername });
+            });
+
+            // ==========================================
+            // COMPARTILHAMENTO DE TELA
+            // ==========================================
+            btnShare.addEventListener('click', async () => {
+                if (isSharing) return stopScreenShare();
+
+                // Obtém as fontes via Electron
+                if (window.electronAPI && window.electronAPI.getSources) {
+                    const sources = await window.electronAPI.getSources();
+                    sourcesList.innerHTML = '';
+                    sources.forEach(s => {
+                        const div = document.createElement('div');
+                        div.className = 'screen-option bg-zinc-950 border border-zinc-700 rounded-lg p-2 cursor-pointer transition-all flex flex-col gap-2';
+                        div.innerHTML = `<img src="${s.thumbnail}" class="rounded w-full h-24 object-cover border border-zinc-800"><span class="text-xs text-center truncate text-zinc-300 font-medium">${s.name}</span>`;
+                        div.onclick = () => startScreenShare(s.id);
+                        sourcesList.appendChild(div);
+                    });
+                    screenModal.classList.remove('hidden');
+                    screenModal.classList.add('flex');
+                } else {
+                    showToast('Erro', 'API Electron não disponível. Execute no Electron.', 'error');
+                }
+            });
+
+            document.getElementById('btn-close-screen-modal').addEventListener('click', () => {
+                screenModal.classList.add('hidden');
+                screenModal.classList.remove('flex');
+            });
+
+            async function startScreenShare(sourceId) {
+                screenModal.classList.add('hidden');
+                screenModal.classList.remove('flex');
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: false,
+                        video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId } }
+                    });
+                    videoElement.srcObject = localStream;
+                    videoElement.muted = true;
+                    isSharing = true;
+                    emptyState.style.display = 'none';
+                    videoElement.classList.add('active');
+                    videoLabel.classList.remove('hidden');
+                    btnShare.classList.add('active-state');
+                    btnShare.classList.remove('bg-blue-600', 'border-blue-500');
+                    btnShare.innerHTML = '<i class="ph ph-stop text-3xl"></i>';
+                    showToast('Compartilhando', 'Sua tela está visível.');
+
+                    socket.emit('start-sharing');
+
+                    localStream.getVideoTracks()[0].onended = stopScreenShare;
+                } catch (err) {
+                    showToast('Erro', 'Não foi possível capturar a tela.', 'error');
+                }
+            }
+
+            function stopScreenShare() {
+                if (localStream) {
+                    localStream.getTracks().forEach(t => t.stop());
+                    localStream = null;
+                }
+                videoElement.srcObject = null;
+                isSharing = false;
+                videoElement.classList.remove('active');
+                videoLabel.classList.add('hidden');
+                setTimeout(() => emptyState.style.display = 'flex', 300);
+                btnShare.classList.remove('active-state');
+                btnShare.classList.add('bg-blue-600', 'border-blue-500');
+                btnShare.innerHTML = '<i class="ph ph-screencast text-3xl"></i>';
+                showToast('Encerrado', 'Compartilhamento parado.');
+            }
+
+            // ==========================================
+            // WEBRTC (P2P)
+            // ==========================================
+            function createPeer(targetId) {
+                const pc = new RTCPeerConnection(config);
+                peers[targetId] = pc;
+                pc.onicecandidate = (e) => {
+                    if (e.candidate) {
+                        socket.emit('ice-candidate', {
+                            target: targetId,
+                            candidate: e.candidate,
+                            sender: mySessionId
+                        });
+                    }
+                };
+                pc.ontrack = (e) => {
+                    emptyState.style.display = 'none';
+                    videoElement.srcObject = e.streams[0];
+                    videoElement.classList.add('active');
+                };
+                if (localStream) {
+                    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+                }
+                return pc;
+            }
+
+            async function createOffer(targetId) {
+                const pc = createPeer(targetId);
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit('offer', {
+                    target: targetId,
+                    sdp: offer,
+                    caller: mySessionId
+                });
+            }
+
+            async function handleOffer(data) {
+                const pc = createPeer(data.caller);
+                await pc.setRemoteDescription(data.sdp);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                socket.emit('answer', {
+                    target: data.caller,
+                    sdp: answer,
+                    answerer: mySessionId
+                });
+            }
+
+            async function handleAnswer(data) {
+                if (peers[data.answerer]) {
+                    await peers[data.answerer].setRemoteDescription(data.sdp);
+                }
+            }
+
+            async function handleCandidate(data) {
+                if (peers[data.sender]) {
+                    await peers[data.sender].addIceCandidate(new RTCIceCandidate(data.candidate));
+                }
+            }
+
+            // ==========================================
+            // BOTÃO SAIR
+            // ==========================================
+            document.getElementById('btn-leave').addEventListener('click', () => {
+                if (isSharing) stopScreenShare();
+                if (window.electronAPI && window.electronAPI.closeApp) {
+                    window.electronAPI.closeApp();
+                } else {
+                    // Fallback: recarregar a página ou fechar janela
+                    window.close();
+                }
+            });
+
+        }); // Fim DOMContentLoaded
+    </script>
+
+</body>
+</html>
