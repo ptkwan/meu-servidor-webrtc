@@ -11,6 +11,7 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
     <style>
+        /* (estilos mantidos iguais aos seus) */
         body { font-family: 'Inter', sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; height: 100vh; overflow: hidden; }
         .video-wrapper { position: relative; width: 100%; height: 100%; background: #18181b; border-radius: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 1px solid #27272a; }
         .video-wrapper video { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.4s ease; }
@@ -34,7 +35,7 @@
 </head>
 <body class="flex flex-col">
 
-    <!-- NOVO MODAL: Sem URL, com Lista de Salas -->
+    <!-- MODAL DE CONEXÃO -->
     <div id="connection-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
         <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4">
             <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-users-three text-blue-500"></i> Bem-vindo</h2>
@@ -49,18 +50,18 @@
                 <h3 class="text-sm font-semibold text-zinc-400 mb-2">Salas Ativas</h3>
                 
                 <div id="rooms-list-container" class="flex flex-col gap-2 max-h-32 overflow-y-auto mb-4 bg-zinc-950 rounded-lg p-2 border border-zinc-800 min-h-[60px]">
-                    <!-- Salas aparecerão aqui (vazio por enquanto) -->
+                    <!-- Salas aparecerão aqui -->
                 </div>
 
                 <div class="flex gap-2">
                     <input type="text" id="input-new-room" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Nome da nova sala" disabled>
-                    <button id="btn-create-room" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50" disabled>Criar</button>
+                    <button id="btn-create-room" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50" disabled>Entrar/Criar</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal de Seleção de Tela (MANTIDO) -->
+    <!-- MODAL DE SELEÇÃO DE TELA -->
     <div id="screen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
         <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[700px] max-w-[90vw] shadow-2xl">
             <div class="flex justify-between items-center mb-4">
@@ -123,15 +124,12 @@
     <div id="toast" class="toast"><i id="toast-icon" class="ph-fill ph-info text-2xl text-blue-500"></i><div><h4 id="toast-title" class="font-semibold text-sm">Notificação</h4><p id="toast-msg" class="text-xs text-zinc-400">Mensagem.</p></div></div>
 
     <script>
-        // ============================================================
-        // TODO O CÓDIGO JAVASCRIPT FOI ENVOLVIDO EM DOMContentLoaded
-        // ============================================================
         document.addEventListener('DOMContentLoaded', () => {
 
             // ==========================================
             // CONEXÃO COM O SERVIDOR (Socket.IO)
             // ==========================================
-            const socket = io('http://localhost:3000', {
+            const socket = io('https://screenshare-pro-qmeu.onrender.com', {
                 autoConnect: true,
                 reconnection: true,
                 reconnectionAttempts: 5,
@@ -186,6 +184,31 @@
             }
 
             // ==========================================
+            // FUNÇÃO PARA RENDERIZAR A LISTA DE SALAS
+            // ==========================================
+            function renderRoomList(rooms) {
+                const container = document.getElementById('rooms-list-container');
+                container.innerHTML = '';
+                if (rooms.length === 0) {
+                    container.innerHTML = '<div class="text-sm text-zinc-500 text-center py-2">Nenhuma sala ativa no momento.</div>';
+                    return;
+                }
+                rooms.forEach(roomName => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center justify-between p-2 bg-zinc-800/40 rounded-lg border border-zinc-700/50 cursor-pointer hover:bg-zinc-700/50 transition-colors';
+                    div.innerHTML = `
+                        <span class="text-sm text-zinc-300"><i class="ph ph-door"></i> ${roomName}</span>
+                        <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">Entrar</span>
+                    `;
+                    div.addEventListener('click', () => {
+                        inputNewRoom.value = roomName;
+                        btnCreateRoom.click();
+                    });
+                    container.appendChild(div);
+                });
+            }
+
+            // ==========================================
             // EVENTOS DO SOCKET
             // ==========================================
             socket.on('connect', () => {
@@ -194,6 +217,8 @@
                 inputNewRoom.disabled = false;
                 btnCreateRoom.disabled = false;
                 showToast('Conectado', 'Conectado ao servidor de sinalização.');
+                // Solicitar lista de salas
+                socket.emit('get-rooms');
             });
 
             socket.on('connect_error', (err) => {
@@ -204,6 +229,14 @@
 
             socket.on('welcome', (payload) => {
                 mySessionId = payload;
+            });
+
+            socket.on('rooms-list', (rooms) => {
+                renderRoomList(rooms);
+            });
+
+            socket.on('rooms-update', (rooms) => {
+                renderRoomList(rooms);
             });
 
             socket.on('update-user-list', (users) => {
@@ -247,7 +280,7 @@
             });
 
             // ==========================================
-            // ENTRAR NA SALA (botão Criar)
+            // ENTRAR NA SALA (botão "Entrar/Criar")
             // ==========================================
             btnCreateRoom.addEventListener('click', () => {
                 const roomName = inputNewRoom.value.trim();
@@ -269,7 +302,6 @@
             btnShare.addEventListener('click', async () => {
                 if (isSharing) return stopScreenShare();
 
-                // Obtém as fontes via Electron
                 if (window.electronAPI && window.electronAPI.getSources) {
                     const sources = await window.electronAPI.getSources();
                     sourcesList.innerHTML = '';
@@ -404,13 +436,11 @@
                 if (window.electronAPI && window.electronAPI.closeApp) {
                     window.electronAPI.closeApp();
                 } else {
-                    // Fallback: recarregar a página ou fechar janela
                     window.close();
                 }
             });
 
-        }); // Fim DOMContentLoaded
+        });
     </script>
-
 </body>
 </html>
