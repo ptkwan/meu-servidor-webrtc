@@ -30,13 +30,13 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #18181b; }
         ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
-        /* Estilo para o botão de tela cheia */
-        .fullscreen-btn { font-size: 20px; }
+        .audio-toggle-btn { background-color: #27272a; border-color: #3f3f46; }
+        .audio-toggle-btn.active { background-color: #22c55e; border-color: #4ade80; color: white; }
     </style>
 </head>
 <body class="flex flex-col">
 
-    <!-- MODAL DE CONEXÃO -->
+    <!-- MODAL DE CONEXÃO (mantido igual) -->
     <div id="connection-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
         <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4">
             <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-users-three text-blue-500"></i> Bem-vindo</h2>
@@ -57,7 +57,7 @@
         </div>
     </div>
 
-    <!-- MODAL DE SELEÇÃO DE TELA -->
+    <!-- MODAL DE SELEÇÃO DE TELA (mantido) -->
     <div id="screen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
         <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[700px] max-w-[90vw] shadow-2xl">
             <div class="flex justify-between items-center mb-4">
@@ -68,7 +68,7 @@
         </div>
     </div>
 
-    <!-- HEADER -->
+    <!-- HEADER (mantido) -->
     <header class="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md z-20">
         <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-lg"><i class="ph-fill ph-monitor-play"></i></div>
@@ -83,7 +83,7 @@
         </div>
     </header>
 
-    <!-- MAIN -->
+    <!-- MAIN (mantido) -->
     <main class="flex-1 p-4 md:p-6 flex gap-6 min-h-0 relative">
         <div class="flex-1 h-full flex flex-col relative min-w-0">
             <div class="video-wrapper" id="main-video-wrapper">
@@ -111,12 +111,17 @@
         </aside>
     </main>
 
-    <!-- FOOTER -->
+    <!-- FOOTER com novos botões -->
     <footer class="flex-shrink-0 h-24 border-t border-zinc-800 bg-zinc-950 flex items-center justify-center gap-4 px-6 z-20 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
         <!-- Botão Compartilhar -->
         <button class="control-btn mx-2 w-16 h-16 bg-blue-600 border-blue-500 hover:bg-blue-500 text-white" id="btn-share" title="Compartilhar Tela"><i class="ph ph-screencast text-3xl"></i></button>
         
-        <!-- NOVO: Botão Tela Cheia -->
+        <!-- NOVO: Botão Toggle Áudio (antes de compartilhar) -->
+        <button class="control-btn audio-toggle-btn" id="btn-audio-toggle" title="Ativar/Desativar áudio do sistema">
+            <i class="ph ph-speaker-simple-slash text-2xl"></i>
+        </button>
+
+        <!-- Botão Tela Cheia -->
         <button class="control-btn" id="btn-fullscreen" title="Tela Cheia">
             <i class="ph ph-arrows-out text-2xl"></i>
         </button>
@@ -145,6 +150,7 @@
             const emptyState = document.getElementById('empty-state');
             const videoLabel = document.getElementById('video-label');
             const btnShare = document.getElementById('btn-share');
+            const btnAudioToggle = document.getElementById('btn-audio-toggle');
             const timeDisplay = document.getElementById('current-time');
             const screenModal = document.getElementById('screen-modal');
             const sourcesList = document.getElementById('sources-list');
@@ -166,6 +172,25 @@
             let currentRoom = null;
             const peers = {};
             const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+            
+            // NOVA variável: áudio ativado?
+            let audioEnabled = false;
+
+            // ==========================================
+            // TOGGLE ÁUDIO
+            // ==========================================
+            btnAudioToggle.addEventListener('click', () => {
+                audioEnabled = !audioEnabled;
+                if (audioEnabled) {
+                    btnAudioToggle.innerHTML = '<i class="ph-fill ph-speaker-simple text-2xl"></i>';
+                    btnAudioToggle.classList.add('active');
+                    showToast('Áudio', 'Áudio do sistema será capturado (apenas em abas do navegador).');
+                } else {
+                    btnAudioToggle.innerHTML = '<i class="ph ph-speaker-simple-slash text-2xl"></i>';
+                    btnAudioToggle.classList.remove('active');
+                    showToast('Áudio', 'Áudio do sistema desativado.');
+                }
+            });
 
             // ==========================================
             // RELÓGIO
@@ -228,8 +253,6 @@
             }
 
             btnFullscreen.addEventListener('click', toggleFullscreen);
-
-            // Duplo clique no vídeo para tela cheia
             videoElement.addEventListener('dblclick', toggleFullscreen);
 
             // ==========================================
@@ -280,20 +303,26 @@
 
             socket.on('user-connected', ({ userId, userName }) => {
                 showToast('Novo Participante', `${userName} entrou.`);
+                // Se eu estiver compartilhando, ofereço a stream para o novo usuário
                 if (isSharing) createOffer(userId);
             });
 
+            // CORREÇÃO: quando alguém começa a compartilhar, TODOS (exceto o streamer) pedem a stream
             socket.on('broadcaster-started', ({ userId }) => {
+                // Se for o próprio, ignora
+                if (userId === mySessionId) return;
                 showToast('Aviso', 'Alguém começou a compartilhar a tela.');
                 // Limpa o vídeo atual antes de pedir a nova stream
                 videoElement.srcObject = null;
                 videoElement.classList.remove('active');
-                emptyState.style.display = 'none'; // esconde o estado vazio durante a transição
+                emptyState.style.display = 'none';
+                // Pede a stream
                 socket.emit('request-stream', { userId });
             });
 
-            // NOVO: quando o streamer para
+            // CORREÇÃO: quando o streamer para
             socket.on('broadcaster-stopped', ({ userId }) => {
+                if (userId === mySessionId) return;
                 showToast('Aviso', 'O streamer parou de compartilhar.');
                 videoElement.srcObject = null;
                 videoElement.classList.remove('active');
@@ -302,8 +331,15 @@
                 }, 300);
             });
 
+            // Quando o streamer recebe um pedido de stream, ele cria a oferta (se estiver compartilhando)
             socket.on('viewer-requested', (viewerId) => {
-                if (isSharing) createOffer(viewerId);
+                // Só cria oferta se estiver compartilhando
+                if (isSharing) {
+                    createOffer(viewerId);
+                } else {
+                    // Se não estiver compartilhando, não faz nada
+                    console.log('Não estou compartilhando, ignorando pedido de', viewerId);
+                }
             });
 
             socket.on('offer', ({ caller, sdp }) => handleOffer({ caller, sdp }));
@@ -365,31 +401,30 @@
                 screenModal.classList.add('hidden');
                 screenModal.classList.remove('flex');
                 try {
-                    // Captura a tela com ÁUDIO (para vídeos com som) e vídeo
-                    localStream = await navigator.mediaDevices.getUserMedia({
-                        audio: {
-                            mandatory: {
-                                chromeMediaSource: 'desktop',
-                                chromeMediaSourceId: sourceId
-                            }
-                        },
+                    // Monta as constraints de acordo com o toggle de áudio
+                    const constraints = {
                         video: {
                             mandatory: {
                                 chromeMediaSource: 'desktop',
                                 chromeMediaSourceId: sourceId,
-                                // Opções para evitar tela branca
                                 frameRate: { ideal: 30, max: 60 }
                             }
                         }
-                    });
+                    };
 
-                    // OPCIONAL: Adicionar microfone separadamente (descomente se quiser)
-                    // try {
-                    //     const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                    //     micStream.getAudioTracks().forEach(track => localStream.addTrack(track));
-                    // } catch (e) {
-                    //     console.log('Microfone não disponível:', e);
-                    // }
+                    // Se áudio estiver ativado, adiciona áudio do sistema
+                    if (audioEnabled) {
+                        constraints.audio = {
+                            mandatory: {
+                                chromeMediaSource: 'desktop',
+                                chromeMediaSourceId: sourceId
+                            }
+                        };
+                    } else {
+                        constraints.audio = false;
+                    }
+
+                    localStream = await navigator.mediaDevices.getUserMedia(constraints);
 
                     videoElement.srcObject = localStream;
                     videoElement.muted = true; // O streamer não ouve o próprio áudio
@@ -400,7 +435,7 @@
                     btnShare.classList.add('active-state');
                     btnShare.classList.remove('bg-blue-600', 'border-blue-500');
                     btnShare.innerHTML = '<i class="ph ph-stop text-3xl"></i>';
-                    showToast('Compartilhando', 'Sua tela está visível.');
+                    showToast('Compartilhando', 'Sua tela está visível.' + (audioEnabled ? ' (com áudio)' : ''));
 
                     socket.emit('start-sharing');
 
@@ -431,9 +466,14 @@
             }
 
             // ==========================================
-            // WEBRTC (P2P)
+            // WEBRTC (P2P) - corrigido para aceitar múltiplos peers
             // ==========================================
             function createPeer(targetId) {
+                // Se já existe uma conexão com esse peer, fecha antes de criar nova
+                if (peers[targetId]) {
+                    peers[targetId].close();
+                    delete peers[targetId];
+                }
                 const pc = new RTCPeerConnection(config);
                 peers[targetId] = pc;
                 pc.onicecandidate = (e) => {
@@ -450,6 +490,7 @@
                     videoElement.srcObject = e.streams[0];
                     videoElement.classList.add('active');
                 };
+                // Adiciona as tracks locais (se estiver compartilhando)
                 if (localStream) {
                     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
                 }
