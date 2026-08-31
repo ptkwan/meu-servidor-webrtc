@@ -11,6 +11,7 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
     <style>
+        /* (estilos mantidos) */
         body { font-family: 'Inter', sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; height: 100vh; overflow: hidden; }
         .video-wrapper { position: relative; width: 100%; height: 100%; background: #18181b; border-radius: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 1px solid #27272a; }
         .video-wrapper video { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.4s ease; }
@@ -36,7 +37,7 @@
 </head>
 <body class="flex flex-col">
 
-    <!-- MODAL DE CONEXÃO (mantido igual) -->
+    <!-- MODAL DE CONEXÃO -->
     <div id="connection-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
         <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4">
             <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-users-three text-blue-500"></i> Bem-vindo</h2>
@@ -46,9 +47,7 @@
             <input type="text" id="input-username" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Digite seu nome (Opcional)">
             <div class="border-t border-zinc-800 pt-4 mt-2">
                 <h3 class="text-sm font-semibold text-zinc-400 mb-2">Salas Ativas</h3>
-                <div id="rooms-list-container" class="flex flex-col gap-2 max-h-32 overflow-y-auto mb-4 bg-zinc-950 rounded-lg p-2 border border-zinc-800 min-h-[60px]">
-                    <!-- Salas aparecerão aqui -->
-                </div>
+                <div id="rooms-list-container" class="flex flex-col gap-2 max-h-32 overflow-y-auto mb-4 bg-zinc-950 rounded-lg p-2 border border-zinc-800 min-h-[60px]"></div>
                 <div class="flex gap-2">
                     <input type="text" id="input-new-room" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Nome da nova sala" disabled>
                     <button id="btn-create-room" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50" disabled>Entrar/Criar</button>
@@ -57,7 +56,7 @@
         </div>
     </div>
 
-    <!-- MODAL DE SELEÇÃO DE TELA (mantido) -->
+    <!-- MODAL DE SELEÇÃO DE TELA -->
     <div id="screen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
         <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[700px] max-w-[90vw] shadow-2xl">
             <div class="flex justify-between items-center mb-4">
@@ -68,7 +67,7 @@
         </div>
     </div>
 
-    <!-- HEADER (mantido) -->
+    <!-- HEADER -->
     <header class="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md z-20">
         <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-lg"><i class="ph-fill ph-monitor-play"></i></div>
@@ -83,7 +82,7 @@
         </div>
     </header>
 
-    <!-- MAIN (mantido) -->
+    <!-- MAIN -->
     <main class="flex-1 p-4 md:p-6 flex gap-6 min-h-0 relative">
         <div class="flex-1 h-full flex flex-col relative min-w-0">
             <div class="video-wrapper" id="main-video-wrapper">
@@ -111,22 +110,15 @@
         </aside>
     </main>
 
-    <!-- FOOTER com novos botões -->
+    <!-- FOOTER -->
     <footer class="flex-shrink-0 h-24 border-t border-zinc-800 bg-zinc-950 flex items-center justify-center gap-4 px-6 z-20 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-        <!-- Botão Compartilhar -->
         <button class="control-btn mx-2 w-16 h-16 bg-blue-600 border-blue-500 hover:bg-blue-500 text-white" id="btn-share" title="Compartilhar Tela"><i class="ph ph-screencast text-3xl"></i></button>
-        
-        <!-- NOVO: Botão Toggle Áudio (antes de compartilhar) -->
         <button class="control-btn audio-toggle-btn" id="btn-audio-toggle" title="Ativar/Desativar áudio do sistema">
             <i class="ph ph-speaker-simple-slash text-2xl"></i>
         </button>
-
-        <!-- Botão Tela Cheia -->
         <button class="control-btn" id="btn-fullscreen" title="Tela Cheia">
             <i class="ph ph-arrows-out text-2xl"></i>
         </button>
-
-        <!-- Botão Sair -->
         <button class="control-btn danger-state ml-4 w-16 rounded-2xl" id="btn-leave" title="Sair da Reunião"><i class="ph ph-phone-disconnect text-2xl"></i></button>
     </footer>
 
@@ -173,7 +165,6 @@
             const peers = {};
             const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
             
-            // NOVA variável: áudio ativado?
             let audioEnabled = false;
 
             // ==========================================
@@ -275,6 +266,7 @@
 
             socket.on('welcome', (payload) => {
                 mySessionId = payload;
+                console.log('Meu ID:', mySessionId);
             });
 
             socket.on('rooms-list', (rooms) => {
@@ -303,26 +295,29 @@
 
             socket.on('user-connected', ({ userId, userName }) => {
                 showToast('Novo Participante', `${userName} entrou.`);
-                // Se eu estiver compartilhando, ofereço a stream para o novo usuário
-                if (isSharing) createOffer(userId);
+                if (isSharing) {
+                    console.log('Estou compartilhando, oferecendo stream para', userId);
+                    createOffer(userId);
+                }
             });
 
-            // CORREÇÃO: quando alguém começa a compartilhar, TODOS (exceto o streamer) pedem a stream
             socket.on('broadcaster-started', ({ userId }) => {
-                // Se for o próprio, ignora
-                if (userId === mySessionId) return;
+                if (userId === mySessionId) {
+                    console.log('Eu comecei a compartilhar, ignorando.');
+                    return;
+                }
+                console.log('Alguém começou a compartilhar:', userId);
                 showToast('Aviso', 'Alguém começou a compartilhar a tela.');
                 // Limpa o vídeo atual antes de pedir a nova stream
                 videoElement.srcObject = null;
                 videoElement.classList.remove('active');
                 emptyState.style.display = 'none';
-                // Pede a stream
                 socket.emit('request-stream', { userId });
             });
 
-            // CORREÇÃO: quando o streamer para
             socket.on('broadcaster-stopped', ({ userId }) => {
                 if (userId === mySessionId) return;
+                console.log('Streamer parou:', userId);
                 showToast('Aviso', 'O streamer parou de compartilhar.');
                 videoElement.srcObject = null;
                 videoElement.classList.remove('active');
@@ -331,24 +326,32 @@
                 }, 300);
             });
 
-            // Quando o streamer recebe um pedido de stream, ele cria a oferta (se estiver compartilhando)
             socket.on('viewer-requested', (viewerId) => {
-                // Só cria oferta se estiver compartilhando
+                console.log('Recebi pedido de stream de', viewerId, 'estou compartilhando?', isSharing);
                 if (isSharing) {
                     createOffer(viewerId);
                 } else {
-                    // Se não estiver compartilhando, não faz nada
                     console.log('Não estou compartilhando, ignorando pedido de', viewerId);
                 }
             });
 
-            socket.on('offer', ({ caller, sdp }) => handleOffer({ caller, sdp }));
-            socket.on('answer', ({ answerer, sdp }) => handleAnswer({ answerer, sdp }));
-            socket.on('ice-candidate', ({ sender, candidate }) => handleCandidate({ sender, candidate }));
+            socket.on('offer', ({ caller, sdp }) => {
+                console.log('Recebi oferta de', caller);
+                handleOffer({ caller, sdp });
+            });
+            socket.on('answer', ({ answerer, sdp }) => {
+                console.log('Recebi answer de', answerer);
+                handleAnswer({ answerer, sdp });
+            });
+            socket.on('ice-candidate', ({ sender, candidate }) => {
+                console.log('Recebi ICE candidate de', sender);
+                handleCandidate({ sender, candidate });
+            });
             socket.on('user-disconnected', (userId) => {
                 if (peers[userId]) {
                     peers[userId].close();
                     delete peers[userId];
+                    console.log('Peer desconectado:', userId);
                 }
             });
 
@@ -401,7 +404,6 @@
                 screenModal.classList.add('hidden');
                 screenModal.classList.remove('flex');
                 try {
-                    // Monta as constraints de acordo com o toggle de áudio
                     const constraints = {
                         video: {
                             mandatory: {
@@ -412,7 +414,6 @@
                         }
                     };
 
-                    // Se áudio estiver ativado, adiciona áudio do sistema
                     if (audioEnabled) {
                         constraints.audio = {
                             mandatory: {
@@ -427,7 +428,7 @@
                     localStream = await navigator.mediaDevices.getUserMedia(constraints);
 
                     videoElement.srcObject = localStream;
-                    videoElement.muted = true; // O streamer não ouve o próprio áudio
+                    videoElement.muted = true;
                     isSharing = true;
                     emptyState.style.display = 'none';
                     videoElement.classList.add('active');
@@ -447,7 +448,6 @@
             }
 
             function stopScreenShare() {
-                // Emitir para o servidor que parou
                 socket.emit('stop-sharing');
 
                 if (localStream) {
@@ -466,10 +466,9 @@
             }
 
             // ==========================================
-            // WEBRTC (P2P) - corrigido para aceitar múltiplos peers
+            // WEBRTC (P2P) - CORRIGIDO
             // ==========================================
             function createPeer(targetId) {
-                // Se já existe uma conexão com esse peer, fecha antes de criar nova
                 if (peers[targetId]) {
                     peers[targetId].close();
                     delete peers[targetId];
@@ -485,12 +484,23 @@
                         });
                     }
                 };
+                // CORREÇÃO AQUI:
                 pc.ontrack = (e) => {
-                    emptyState.style.display = 'none';
-                    videoElement.srcObject = e.streams[0];
-                    videoElement.classList.add('active');
+                    console.log('ontrack disparado! Recebendo stream de', targetId, 'tracks:', e.streams[0].getTracks());
+                    const stream = e.streams[0];
+                    // Só atualiza se for um stream diferente
+                    if (videoElement.srcObject !== stream) {
+                        videoElement.srcObject = stream;
+                        videoElement.classList.add('active');
+                        emptyState.style.display = 'none';
+                        // Tenta reproduzir e captura erros
+                        videoElement.play().catch(err => {
+                            console.warn('Erro ao reproduzir:', err);
+                            // Se falhar, tenta novamente após um breve delay
+                            setTimeout(() => videoElement.play().catch(e => console.warn('Falha novamente:', e)), 100);
+                        });
+                    }
                 };
-                // Adiciona as tracks locais (se estiver compartilhando)
                 if (localStream) {
                     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
                 }
@@ -498,6 +508,7 @@
             }
 
             async function createOffer(targetId) {
+                console.log('Criando oferta para', targetId);
                 const pc = createPeer(targetId);
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
@@ -509,6 +520,7 @@
             }
 
             async function handleOffer(data) {
+                console.log('Manipulando oferta de', data.caller);
                 const pc = createPeer(data.caller);
                 await pc.setRemoteDescription(data.sdp);
                 const answer = await pc.createAnswer();
@@ -521,12 +533,14 @@
             }
 
             async function handleAnswer(data) {
+                console.log('Manipulando answer de', data.answerer);
                 if (peers[data.answerer]) {
                     await peers[data.answerer].setRemoteDescription(data.sdp);
                 }
             }
 
             async function handleCandidate(data) {
+                console.log('Manipulando candidate de', data.sender);
                 if (peers[data.sender]) {
                     await peers[data.sender].addIceCandidate(new RTCIceCandidate(data.candidate));
                 }
