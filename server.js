@@ -46,7 +46,7 @@ io.on('connection', (socket) => {
     // Notificar entrada
     socket.to(roomId).emit('user-connected', { userId: socket.id, userName: socket.data.username });
 
-    // **ATUALIZAR LISTA DE SALAS PARA TODOS**
+    // ATUALIZAR LISTA DE SALAS PARA TODOS
     io.emit('rooms-update', getRoomList());
   });
 
@@ -54,6 +54,14 @@ io.on('connection', (socket) => {
     const room = socket.data.room;
     if (room) {
       socket.to(room).emit('broadcaster-started', { userId: socket.id });
+    }
+  });
+
+  // NOVO: quando alguém para de compartilhar
+  socket.on('stop-sharing', () => {
+    const room = socket.data.room;
+    if (room) {
+      io.to(room).emit('broadcaster-stopped', { userId: socket.id });
     }
   });
 

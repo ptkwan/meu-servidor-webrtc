@@ -19,19 +19,19 @@ function createWindow() {
         }
     });
 
-    // Remove o menu superior feio
-    mainWindow.setMenu(null); 
+    // Remove o menu superior
+    mainWindow.setMenu(null);
     
     // Carrega a interface
     mainWindow.loadFile('index.html');
     
-
+    // DevTools NÃO é aberto automaticamente
 }
 
 app.whenReady().then(createWindow);
 
-app.on('window-all-closed', () => { 
-    if (process.platform !== 'darwin') app.quit(); 
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
 });
 
 ipcMain.on('close-app', () => app.quit());
