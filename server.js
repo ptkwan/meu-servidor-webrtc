@@ -10,24 +10,33 @@ const io = new Server(server, {
   cors: { origin: "*" }
 });
 
-// Estrutura: roomName -> Set de socket ids
-const rooms = new Map();
+const rooms = new Map(); // roomId -> Set de socket ids
+const roomBroadcasters = new Map(); // roomId -> Set de socket ids dos streamers
 
-// Função para obter a lista de salas (apenas nomes)
 function getRoomList() {
   return Array.from(rooms.keys());
+}
+
+// NOVA FUNÇÃO: Junta a lista de usuários com o status de "Ao Vivo"
+function broadcastUserList(roomId) {
+  if (!rooms.has(roomId)) return;
+  const users = Array.from(rooms.get(roomId)).map(id => ({
+    id,
+    name: io.sockets.sockets.get(id)?.data.username || 'Anônimo',
+    // O servidor agora diz pro HTML diretamente se esse usuário está compartilhando
+    isStreaming: roomBroadcasters.get(roomId)?.has(id) || false 
+  }));
+  io.to(roomId).emit('update-user-list', users);
 }
 
 io.on('connection', (socket) => {
   console.log('Cliente conectado:', socket.id);
 
-  // Quando o cliente pedir a lista de salas
   socket.on('get-rooms', () => {
     socket.emit('rooms-list', getRoomList());
   });
 
   socket.on('join-room', ({ roomId, username }) => {
-    // Se a sala não existir, cria
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Set());
     }
@@ -36,37 +45,44 @@ io.on('connection', (socket) => {
     socket.data.username = username || 'Anônimo';
     socket.data.room = roomId;
 
-    // Atualizar lista de usuários para todos na sala
-    const users = Array.from(rooms.get(roomId)).map(id => ({
-      id,
-      name: io.sockets.sockets.get(id)?.data.username || 'Anônimo'
-    }));
-    io.to(roomId).emit('update-user-list', users);
-
-    // Notificar entrada
+    // Dispara a lista unificada para todos na sala
+    broadcastUserList(roomId);
+    
     socket.to(roomId).emit('user-connected', { userId: socket.id, userName: socket.data.username });
-
-    // ATUALIZAR LISTA DE SALAS PARA TODOS
     io.emit('rooms-update', getRoomList());
   });
 
   socket.on('start-sharing', () => {
     const room = socket.data.room;
     if (room) {
-      socket.to(room).emit('broadcaster-started', { userId: socket.id });
+      if (!roomBroadcasters.has(room)) {
+        roomBroadcasters.set(room, new Set());
+      }
+      roomBroadcasters.get(room).add(socket.id);
+      
+      broadcastUserList(room); // Atualiza as telas de todos para mostrar o botão "ASSISTIR"
+      io.to(room).emit('broadcaster-started', { userId: socket.id });
     }
   });
 
-  // NOVO: quando alguém para de compartilhar
   socket.on('stop-sharing', () => {
     const room = socket.data.room;
-    if (room) {
+    if (room && roomBroadcasters.has(room)) {
+      roomBroadcasters.get(room).delete(socket.id);
+      if (roomBroadcasters.get(room).size === 0) {
+        roomBroadcasters.delete(room);
+      }
+      
+      broadcastUserList(room); // Remove o botão "ASSISTIR" desse usuário
       io.to(room).emit('broadcaster-stopped', { userId: socket.id });
     }
   });
 
   socket.on('request-stream', ({ userId }) => {
-    io.to(userId).emit('viewer-requested', socket.id);
+    const room = socket.data.room;
+    if (room && roomBroadcasters.has(room) && roomBroadcasters.get(room).has(userId)) {
+      io.to(userId).emit('viewer-requested', socket.id);
+    }
   });
 
   socket.on('offer', ({ target, sdp, caller }) => {
@@ -83,21 +99,22 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     const room = socket.data.room;
-    if (room && rooms.has(room)) {
-      rooms.get(room).delete(socket.id);
-      // Se a sala ficou vazia, removê-la
-      if (rooms.get(room).size === 0) {
-        rooms.delete(room);
-        // Notificar todos que a sala foi removida
-        io.emit('rooms-update', getRoomList());
-      } else {
-        // Atualizar lista de usuários da sala
-        const users = Array.from(rooms.get(room)).map(id => ({
-          id,
-          name: io.sockets.sockets.get(id)?.data.username || 'Anônimo'
-        }));
-        io.to(room).emit('update-user-list', users);
-        io.to(room).emit('user-disconnected', socket.id);
+    if (room) {
+      if (roomBroadcasters.has(room)) {
+        roomBroadcasters.get(room).delete(socket.id);
+        if (roomBroadcasters.get(room).size === 0) {
+          roomBroadcasters.delete(room);
+        }
+      }
+      if (rooms.has(room)) {
+        rooms.get(room).delete(socket.id);
+        if (rooms.get(room).size === 0) {
+          rooms.delete(room);
+          io.emit('rooms-update', getRoomList());
+        } else {
+          broadcastUserList(room);
+          io.to(room).emit('user-disconnected', socket.id);
+        }
       }
     }
   });

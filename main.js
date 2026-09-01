@@ -1,10 +1,8 @@
 const { app, BrowserWindow, desktopCapturer, ipcMain } = require('electron');
 const path = require('path');
 
-// --- ESCUDO ANTI-CRASH ---
 process.on('uncaughtException', (error) => console.error('Erro Crítico:', error));
 process.on('unhandledRejection', (reason) => console.error('Promessa Rejeitada:', reason));
-// -------------------------
 
 let mainWindow;
 
@@ -19,13 +17,11 @@ function createWindow() {
         }
     });
 
-    // Remove o menu superior
     mainWindow.setMenu(null);
-    
-    // Carrega a interface
     mainWindow.loadFile('index.html');
     
-    // DevTools NÃO é aberto automaticamente
+    // FORÇA O DEVTOOLS PARA DEBUG
+    mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(createWindow);
@@ -36,7 +32,6 @@ app.on('window-all-closed', () => {
 
 ipcMain.on('close-app', () => app.quit());
 
-// Função que pega as telas do PC para compartilhar
 ipcMain.handle('GET_SOURCES', async () => {
     const sources = await desktopCapturer.getSources({ types: ['window', 'screen'] });
     return sources.map(s => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() }));

@@ -11,28 +11,60 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
     <style>
-        /* (estilos mantidos) */
         body { font-family: 'Inter', sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; height: 100vh; overflow: hidden; }
         .video-wrapper { position: relative; width: 100%; height: 100%; background: #18181b; border-radius: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 1px solid #27272a; }
         .video-wrapper video { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.4s ease; }
         .video-wrapper video.active { opacity: 1; }
         .video-label { position: absolute; bottom: 16px; left: 16px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 255, 255, 0.1); z-index: 10; }
         .video-status { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; z-index: 5; }
-        @keyframes pulse-ring { 0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        @keyframes pulse-ring { 0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); } 100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
         .recording-indicator { width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; animation: pulse-ring 2s infinite; }
         .control-btn { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; cursor: pointer; transition: all 0.2s ease; }
         .control-btn:hover { background-color: #3f3f46; transform: translateY(-2px); }
         .control-btn.active-state { background-color: #3b82f6; border-color: #60a5fa; color: white; }
         .control-btn.danger-state { background-color: #ef4444; border-color: #f87171; color: white; }
         .control-btn.danger-state:hover { background-color: #dc2626; }
+        .control-btn.volume-active { background-color: #22c55e; border-color: #4ade80; color: white; }
+        .control-btn.volume-active:hover { background-color: #16a34a; }
         .toast { position: fixed; top: 20px; right: -300px; background: #18181b; border-left: 4px solid #3b82f6; padding: 16px 20px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); transition: right 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55); z-index: 100; display: flex; align-items: center; gap: 12px; }
         .toast.show { right: 20px; }
         .screen-option:hover { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #18181b; }
         ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
-        .audio-toggle-btn { background-color: #27272a; border-color: #3f3f46; }
-        .audio-toggle-btn.active { background-color: #22c55e; border-color: #4ade80; color: white; }
+
+        /* Estilos dos Botões da Lista */
+        .btn-assistir {
+            background-color: #ef4444;
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            margin-left: auto;
+            animation: pulse-ring 1.5s infinite;
+            transition: background 0.2s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn-assistir:hover { background-color: #dc2626; }
+        .btn-assistindo {
+            background-color: #22c55e;
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: default;
+        }
+        .participant-item { transition: background 0.2s; }
+        .participant-item.streaming { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
     </style>
 </head>
 <body class="flex flex-col">
@@ -91,7 +123,7 @@
                         <i class="ph ph-screencast"></i>
                     </div>
                     <h2 class="text-xl font-medium text-zinc-200">Pronto para compartilhar</h2>
-                    <p class="text-sm text-zinc-500 max-w-xs">Clique no botão de compartilhamento abaixo.</p>
+                    <p class="text-sm text-zinc-500 max-w-xs">Clique no botão "ASSISTIR" de um participante na lista ao lado.</p>
                 </div>
                 <video id="shared-screen" autoplay playsinline></video>
                 <div class="video-label hidden" id="video-label">
@@ -110,15 +142,24 @@
         </aside>
     </main>
 
-    <!-- FOOTER -->
+    <!-- FOOTER: Somente o botão de volume como solicitado -->
     <footer class="flex-shrink-0 h-24 border-t border-zinc-800 bg-zinc-950 flex items-center justify-center gap-4 px-6 z-20 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        
         <button class="control-btn mx-2 w-16 h-16 bg-blue-600 border-blue-500 hover:bg-blue-500 text-white" id="btn-share" title="Compartilhar Tela"><i class="ph ph-screencast text-3xl"></i></button>
-        <button class="control-btn audio-toggle-btn" id="btn-audio-toggle" title="Ativar/Desativar áudio do sistema">
+        
+        <!-- O ÚNICO BOTÃO DE ÁUDIO -->
+        <button class="control-btn" id="btn-volume" title="Ativar/Desativar áudio da tela assistida" style="background-color: #27272a; border-color: #3f3f46;">
             <i class="ph ph-speaker-simple-slash text-2xl"></i>
         </button>
+
         <button class="control-btn" id="btn-fullscreen" title="Tela Cheia">
             <i class="ph ph-arrows-out text-2xl"></i>
         </button>
+        
+        <button class="control-btn" id="btn-force-play" title="Forçar reprodução" style="background-color: #8b5cf6; border-color: #a78bfa;">
+            <i class="ph ph-play-circle text-2xl"></i>
+        </button>
+        
         <button class="control-btn danger-state ml-4 w-16 rounded-2xl" id="btn-leave" title="Sair da Reunião"><i class="ph ph-phone-disconnect text-2xl"></i></button>
     </footer>
 
@@ -127,9 +168,6 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
 
-            // ==========================================
-            // CONEXÃO COM O SERVIDOR (Socket.IO)
-            // ==========================================
             const socket = io('https://screenshare-pro-qmeu.onrender.com', {
                 autoConnect: true,
                 reconnection: true,
@@ -137,12 +175,11 @@
                 reconnectionDelay: 1000
             });
 
-            // Referências DOM
             const videoElement = document.getElementById('shared-screen');
             const emptyState = document.getElementById('empty-state');
             const videoLabel = document.getElementById('video-label');
             const btnShare = document.getElementById('btn-share');
-            const btnAudioToggle = document.getElementById('btn-audio-toggle');
+            const btnVolume = document.getElementById('btn-volume');
             const timeDisplay = document.getElementById('current-time');
             const screenModal = document.getElementById('screen-modal');
             const sourcesList = document.getElementById('sources-list');
@@ -156,42 +193,20 @@
             const btnCreateRoom = document.getElementById('btn-create-room');
             const btnFullscreen = document.getElementById('btn-fullscreen');
             const videoWrapper = document.getElementById('main-video-wrapper');
+            const btnForcePlay = document.getElementById('btn-force-play');
 
-            // Variáveis de estado
             let isSharing = false;
             let localStream = null;
-            let mySessionId = null;
             let currentRoom = null;
             const peers = {};
             const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+            let currentStreamerId = null;
             
-            let audioEnabled = false;
+            // Player começa mutado
+            let isMuted = true; 
 
             // ==========================================
-            // TOGGLE ÁUDIO
-            // ==========================================
-            btnAudioToggle.addEventListener('click', () => {
-                audioEnabled = !audioEnabled;
-                if (audioEnabled) {
-                    btnAudioToggle.innerHTML = '<i class="ph-fill ph-speaker-simple text-2xl"></i>';
-                    btnAudioToggle.classList.add('active');
-                    showToast('Áudio', 'Áudio do sistema será capturado (apenas em abas do navegador).');
-                } else {
-                    btnAudioToggle.innerHTML = '<i class="ph ph-speaker-simple-slash text-2xl"></i>';
-                    btnAudioToggle.classList.remove('active');
-                    showToast('Áudio', 'Áudio do sistema desativado.');
-                }
-            });
-
-            // ==========================================
-            // RELÓGIO
-            // ==========================================
-            setInterval(() => {
-                timeDisplay.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            }, 1000);
-
-            // ==========================================
-            // TOAST
+            // TOAST & RELÓGIO
             // ==========================================
             let toastTimeout;
             function showToast(title, message, type = 'info') {
@@ -205,9 +220,47 @@
                 toastTimeout = setTimeout(() => toast.classList.remove('show'), 4000);
             }
 
+            setInterval(() => {
+                timeDisplay.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            }, 1000);
+
             // ==========================================
-            // FUNÇÃO PARA RENDERIZAR A LISTA DE SALAS
+            // CONTROLE ÚNICO DE VOLUME
             // ==========================================
+            btnVolume.addEventListener('click', () => {
+                isMuted = !isMuted;
+                videoElement.muted = isMuted;
+                if (isMuted) {
+                    btnVolume.innerHTML = '<i class="ph ph-speaker-simple-slash text-2xl"></i>';
+                    btnVolume.classList.remove('volume-active');
+                    showToast('Áudio', 'Áudio da transmissão silenciado.');
+                } else {
+                    btnVolume.innerHTML = '<i class="ph ph-speaker-high text-2xl"></i>';
+                    btnVolume.classList.add('volume-active');
+                    showToast('Áudio', 'Áudio da transmissão ativado.');
+                }
+            });
+
+            function toggleFullscreen() {
+                if (!document.fullscreenElement) {
+                    videoWrapper.requestFullscreen().catch(() => {});
+                } else {
+                    document.exitFullscreen();
+                }
+            }
+            btnFullscreen.addEventListener('click', toggleFullscreen);
+            videoElement.addEventListener('dblclick', toggleFullscreen);
+
+            btnForcePlay.addEventListener('click', () => {
+                if (!videoElement.srcObject) {
+                    showToast('Aviso', 'Nenhuma stream disponível.', 'error');
+                    return;
+                }
+                videoElement.play()
+                    .then(() => showToast('Sucesso', 'Reprodução iniciada.'))
+                    .catch(err => showToast('Erro', 'Falha: ' + err.message, 'error'));
+            });
+
             function renderRoomList(rooms) {
                 const container = document.getElementById('rooms-list-container');
                 container.innerHTML = '';
@@ -231,132 +284,231 @@
             }
 
             // ==========================================
-            // TELA CHEIA
+            // WEBRTC - CONSTRUÇÃO DA PONTE
             // ==========================================
-            function toggleFullscreen() {
-                if (!document.fullscreenElement) {
-                    videoWrapper.requestFullscreen().catch(err => {
-                        showToast('Erro', 'Não foi possível entrar em tela cheia.', 'error');
-                    });
+            function createPeer(targetId) {
+                if (peers[targetId]) {
+                    peers[targetId].close();
+                    delete peers[targetId];
+                }
+                const pc = new RTCPeerConnection(config);
+                peers[targetId] = pc;
+
+                pc.onicecandidate = (e) => {
+                    if (e.candidate) {
+                        socket.emit('ice-candidate', { target: targetId, candidate: e.candidate, sender: socket.id });
+                    }
+                };
+
+                let streamReceived = false;
+                pc.ontrack = (e) => {
+                    if (streamReceived) return;
+                    streamReceived = true;
+                    
+                    const stream = e.streams[0];
+                    videoElement.srcObject = stream;
+                    videoElement.classList.add('active');
+                    emptyState.style.display = 'none';
+                    videoElement.muted = isMuted;
+
+                    function attemptPlay(attempt = 0) {
+                        if (attempt > 10) return;
+                        videoElement.play().catch(err => {
+                            setTimeout(() => attemptPlay(attempt + 1), 500);
+                        });
+                    }
+                    attemptPlay();
+                };
+
+                if (localStream) {
+                    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
                 } else {
-                    document.exitFullscreen();
+                    pc.addTransceiver('video', { direction: 'recvonly' });
+                    pc.addTransceiver('audio', { direction: 'recvonly' });
+                }
+
+                return pc;
+            }
+
+            async function createOffer(targetId) {
+                const pc = createPeer(targetId);
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit('offer', { target: targetId, sdp: offer, caller: socket.id });
+            }
+
+            async function handleOffer(data) {
+                const pc = createPeer(data.caller);
+                await pc.setRemoteDescription(data.sdp);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                socket.emit('answer', { target: data.caller, sdp: answer, answerer: socket.id });
+            }
+
+            async function handleAnswer(data) {
+                if (peers[data.answerer]) {
+                    await peers[data.answerer].setRemoteDescription(data.sdp);
                 }
             }
 
-            btnFullscreen.addEventListener('click', toggleFullscreen);
-            videoElement.addEventListener('dblclick', toggleFullscreen);
+            async function handleCandidate(data) {
+                if (peers[data.sender]) {
+                    await peers[data.sender].addIceCandidate(new RTCIceCandidate(data.candidate));
+                }
+            }
 
             // ==========================================
-            // EVENTOS DO SOCKET
+            // FUNÇÃO PARA ASSISTIR UM STREAMER
+            // ==========================================
+            function watchStreamer(userId) {
+                if (currentStreamerId === userId) {
+                    showToast('Info', 'Você já está assistindo a esta tela.', 'info');
+                    return;
+                }
+                
+                Object.keys(peers).forEach(id => {
+                    if (peers[id]) {
+                        peers[id].close();
+                        delete peers[id];
+                    }
+                });
+                
+                videoElement.srcObject = null;
+                videoElement.classList.remove('active');
+                
+                socket.emit('request-stream', { userId });
+                currentStreamerId = userId;
+                
+                // Força a atualização da lista para o botão mudar para "ASSISTINDO"
+                updateUserList();
+                
+                const userName = getUserName(userId);
+                showToast('Aguardando', `Carregando tela de ${userName}...`, 'info');
+            }
+            window.watchStreamer = watchStreamer;
+
+            // ==========================================
+            // SOCKET EVENTS
             // ==========================================
             socket.on('connect', () => {
                 discoveryStatus.innerHTML = `<i class="ph ph-check-circle"></i> Conectado ao servidor!`;
                 discoveryStatus.className = "text-sm text-green-500 flex items-center gap-2 bg-green-500/10 p-2 rounded border border-green-500/20";
                 inputNewRoom.disabled = false;
                 btnCreateRoom.disabled = false;
-                showToast('Conectado', 'Conectado ao servidor de sinalização.');
+                showToast('Conectado', 'Servidor conectado.');
                 socket.emit('get-rooms');
             });
 
-            socket.on('connect_error', (err) => {
-                discoveryStatus.innerHTML = `<i class="ph ph-warning-circle"></i> Erro: servidor offline?`;
+            socket.on('connect_error', () => {
+                discoveryStatus.innerHTML = `<i class="ph ph-warning-circle"></i> Servidor offline?`;
                 discoveryStatus.className = "text-sm text-red-500 flex items-center gap-2 bg-red-500/10 p-2 rounded border border-red-500/20";
-                showToast('Erro de conexão', 'Não foi possível conectar ao servidor.', 'error');
+                showToast('Erro', 'Não foi possível conectar ao servidor.', 'error');
             });
 
-            socket.on('welcome', (payload) => {
-                mySessionId = payload;
-                console.log('Meu ID:', mySessionId);
-            });
-
-            socket.on('rooms-list', (rooms) => {
-                renderRoomList(rooms);
-            });
-
-            socket.on('rooms-update', (rooms) => {
-                renderRoomList(rooms);
-            });
+            socket.on('rooms-list', renderRoomList);
+            socket.on('rooms-update', renderRoomList);
 
             socket.on('update-user-list', (users) => {
-                userCountEl.textContent = users.length;
-                usersListEl.innerHTML = '';
-                users.forEach(u => {
-                    const isMe = u.id === mySessionId;
-                    const initial = u.name.charAt(0).toUpperCase();
-                    const div = document.createElement('div');
-                    div.className = 'flex items-center gap-3 p-2 rounded-lg bg-zinc-800/40 border border-zinc-700/50';
-                    div.innerHTML = `
-                        <div class="w-8 h-8 rounded-full ${isMe ? 'bg-blue-600' : 'bg-zinc-600'} flex items-center justify-center text-xs font-bold text-white">${initial}</div>
-                        <span class="text-sm text-zinc-300 truncate w-full">${u.name} ${isMe ? '<span class="text-zinc-500 text-xs">(Você)</span>' : ''}</span>
-                    `;
-                    usersListEl.appendChild(div);
-                });
+                window._users = users;
+                
+                // Abre a tela automaticamente se houver alguém transmitindo e eu não estiver assistindo ninguém
+                const isWatchingSomeone = users.find(u => u.id === currentStreamerId && u.isStreaming);
+                if (!isWatchingSomeone && currentStreamerId !== null) {
+                    // O streamer que eu assistia parou
+                    videoElement.srcObject = null;
+                    videoElement.classList.remove('active');
+                    emptyState.style.display = 'flex';
+                    currentStreamerId = null;
+                }
+
+                if (currentStreamerId === null) {
+                    const availableStreamer = users.find(u => u.isStreaming && u.id !== socket.id);
+                    if (availableStreamer) {
+                        watchStreamer(availableStreamer.id);
+                    }
+                }
+                
+                updateUserList();
             });
 
+            function updateUserList() {
+                const users = window._users || [];
+                userCountEl.textContent = users.length;
+                usersListEl.innerHTML = '';
+                
+                users.forEach(u => {
+                    const isMe = u.id === socket.id;
+                    const isStreamer = u.isStreaming; // Vem diretamente do servidor agora
+                    const initial = u.name.charAt(0).toUpperCase();
+                    
+                    const div = document.createElement('div');
+                    div.className = `flex items-center gap-3 p-2 rounded-lg border ${isStreamer ? 'participant-item streaming border-red-500/50 bg-red-500/10' : 'participant-item border-zinc-700/50 bg-zinc-800/40'}`;
+                    
+                    let badgeHtml = '';
+                    if (isStreamer && isMe) {
+                        badgeHtml = '<span class="text-red-500 text-[10px] font-bold ml-auto" style="animation: pulse-ring 1.5s infinite;">SUA TELA</span>';
+                    } else if (isStreamer && !isMe) {
+                        if (currentStreamerId === u.id) {
+                            badgeHtml = `<button class="btn-assistindo">
+                                            <i class="ph-fill ph-eye text-sm"></i> ASSISTINDO
+                                         </button>`;
+                        } else {
+                            badgeHtml = `<button class="btn-assistir" onclick="window.watchStreamer('${u.id}')">
+                                            <i class="ph-fill ph-play-circle text-sm"></i> AO VIVO
+                                         </button>`;
+                        }
+                    }
+
+                    div.innerHTML = `
+                        <div class="w-8 h-8 rounded-full flex-shrink-0 ${isMe ? 'bg-blue-600' : 'bg-zinc-600'} flex items-center justify-center text-xs font-bold text-white">${initial}</div>
+                        <span class="text-sm text-zinc-300 truncate flex-1">${u.name} ${isMe ? '<span class="text-zinc-500 text-xs">(Você)</span>' : ''}</span>
+                        ${badgeHtml}
+                    `;
+                    
+                    usersListEl.appendChild(div);
+                });
+            }
+
             socket.on('user-connected', ({ userId, userName }) => {
-                showToast('Novo Participante', `${userName} entrou.`);
-                if (isSharing) {
-                    console.log('Estou compartilhando, oferecendo stream para', userId);
-                    createOffer(userId);
-                }
+                showToast('Novo', `${userName} entrou na sala.`);
+                if (isSharing) createOffer(userId); 
             });
 
             socket.on('broadcaster-started', ({ userId }) => {
-                if (userId === mySessionId) {
-                    console.log('Eu comecei a compartilhar, ignorando.');
-                    return;
+                if (userId !== socket.id) {
+                    showToast('Aviso', `${getUserName(userId)} está transmitindo a tela.`, 'info');
                 }
-                console.log('Alguém começou a compartilhar:', userId);
-                showToast('Aviso', 'Alguém começou a compartilhar a tela.');
-                // Limpa o vídeo atual antes de pedir a nova stream
-                videoElement.srcObject = null;
-                videoElement.classList.remove('active');
-                emptyState.style.display = 'none';
-                socket.emit('request-stream', { userId });
             });
 
             socket.on('broadcaster-stopped', ({ userId }) => {
-                if (userId === mySessionId) return;
-                console.log('Streamer parou:', userId);
-                showToast('Aviso', 'O streamer parou de compartilhar.');
-                videoElement.srcObject = null;
-                videoElement.classList.remove('active');
-                setTimeout(() => {
-                    emptyState.style.display = 'flex';
-                }, 300);
-            });
-
-            socket.on('viewer-requested', (viewerId) => {
-                console.log('Recebi pedido de stream de', viewerId, 'estou compartilhando?', isSharing);
-                if (isSharing) {
-                    createOffer(viewerId);
-                } else {
-                    console.log('Não estou compartilhando, ignorando pedido de', viewerId);
+                if (userId !== socket.id) {
+                    showToast('Aviso', 'Um participante parou de transmitir.', 'info');
                 }
             });
 
-            socket.on('offer', ({ caller, sdp }) => {
-                console.log('Recebi oferta de', caller);
-                handleOffer({ caller, sdp });
+            socket.on('viewer-requested', (viewerId) => {
+                if (isSharing) createOffer(viewerId);
             });
-            socket.on('answer', ({ answerer, sdp }) => {
-                console.log('Recebi answer de', answerer);
-                handleAnswer({ answerer, sdp });
-            });
-            socket.on('ice-candidate', ({ sender, candidate }) => {
-                console.log('Recebi ICE candidate de', sender);
-                handleCandidate({ sender, candidate });
-            });
+
+            socket.on('offer', ({ caller, sdp }) => handleOffer({ caller, sdp }));
+            socket.on('answer', ({ answerer, sdp }) => handleAnswer({ answerer, sdp }));
+            socket.on('ice-candidate', ({ sender, candidate }) => handleCandidate({ sender, candidate }));
+            
             socket.on('user-disconnected', (userId) => {
                 if (peers[userId]) {
                     peers[userId].close();
                     delete peers[userId];
-                    console.log('Peer desconectado:', userId);
                 }
             });
 
+            function getUserName(userId) {
+                const users = window._users || [];
+                const found = users.find(u => u.id === userId);
+                return found ? found.name : 'Alguém';
+            }
+
             // ==========================================
-            // ENTRAR NA SALA (botão "Entrar/Criar")
+            // ENTRAR NA SALA
             // ==========================================
             btnCreateRoom.addEventListener('click', () => {
                 const roomName = inputNewRoom.value.trim();
@@ -367,17 +519,22 @@
                 currentRoom = roomName;
                 statusDot.className = 'w-2 h-2 rounded-full bg-green-500';
                 statusText.textContent = currentRoom;
-                showToast('Conectado', `Bem-vindo à sala: ${currentRoom}`);
-
+                showToast('Conectado', `Sala: ${currentRoom}`);
+                
+                currentStreamerId = null;
+                
+                videoElement.srcObject = null;
+                videoElement.classList.remove('active');
+                emptyState.style.display = 'flex';
+                
                 socket.emit('join-room', { roomId: currentRoom, username: myUsername });
             });
 
             // ==========================================
-            // COMPARTILHAMENTO DE TELA
+            // COMPARTILHAMENTO DE TELA (RESOLUÇÃO MÁXIMA)
             // ==========================================
             btnShare.addEventListener('click', async () => {
                 if (isSharing) return stopScreenShare();
-
                 if (window.electronAPI && window.electronAPI.getSources) {
                     const sources = await window.electronAPI.getSources();
                     sourcesList.innerHTML = '';
@@ -391,7 +548,7 @@
                     screenModal.classList.remove('hidden');
                     screenModal.classList.add('flex');
                 } else {
-                    showToast('Erro', 'API Electron não disponível. Execute no Electron.', 'error');
+                    showToast('Erro', 'API Electron não disponível.', 'error');
                 }
             });
 
@@ -409,26 +566,25 @@
                             mandatory: {
                                 chromeMediaSource: 'desktop',
                                 chromeMediaSourceId: sourceId,
-                                frameRate: { ideal: 30, max: 60 }
+                                width: { ideal: 3840, max: 3840 },
+                                height: { ideal: 2160, max: 2160 },
+                                frameRate: { ideal: 60, max: 60 }
                             }
-                        }
-                    };
-
-                    if (audioEnabled) {
-                        constraints.audio = {
+                        },
+                        audio: {
                             mandatory: {
                                 chromeMediaSource: 'desktop',
                                 chromeMediaSourceId: sourceId
                             }
-                        };
-                    } else {
-                        constraints.audio = false;
-                    }
+                        }
+                    };
 
                     localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    const videoTrack = localStream.getVideoTracks()[0];
+                    const settings = videoTrack.getSettings();
 
                     videoElement.srcObject = localStream;
-                    videoElement.muted = true;
+                    videoElement.muted = true; // Você não ouve a sua própria transmissão
                     isSharing = true;
                     emptyState.style.display = 'none';
                     videoElement.classList.add('active');
@@ -436,119 +592,52 @@
                     btnShare.classList.add('active-state');
                     btnShare.classList.remove('bg-blue-600', 'border-blue-500');
                     btnShare.innerHTML = '<i class="ph ph-stop text-3xl"></i>';
-                    showToast('Compartilhando', 'Sua tela está visível.' + (audioEnabled ? ' (com áudio)' : ''));
-
+                    showToast('Compartilhando', `Tela visível (${settings.width}x${settings.height})`);
+                    
                     socket.emit('start-sharing');
-
                     localStream.getVideoTracks()[0].onended = stopScreenShare;
                 } catch (err) {
                     console.error(err);
-                    showToast('Erro', 'Não foi possível capturar a tela. Verifique as permissões.', 'error');
+                    try {
+                        const fallbackConstraints = {
+                            video: {
+                                mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId, frameRate: { ideal: 30, max: 60 } }
+                            },
+                            audio: false
+                        };
+                        localStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                        videoElement.srcObject = localStream;
+                        videoElement.muted = true;
+                        isSharing = true;
+                        emptyState.style.display = 'none';
+                        videoElement.classList.add('active');
+                        videoLabel.classList.remove('hidden');
+                        btnShare.classList.add('active-state');
+                        btnShare.classList.remove('bg-blue-600', 'border-blue-500');
+                        btnShare.innerHTML = '<i class="ph ph-stop text-3xl"></i>';
+                        showToast('Compartilhando', `Tela visível (Sem áudio)`);
+                        
+                        socket.emit('start-sharing');
+                        localStream.getVideoTracks()[0].onended = stopScreenShare;
+                    } catch (fallbackErr) {
+                        showToast('Erro', 'Falha ao capturar tela. Tente novamente.', 'error');
+                    }
                 }
             }
 
             function stopScreenShare() {
                 socket.emit('stop-sharing');
-
                 if (localStream) {
                     localStream.getTracks().forEach(t => t.stop());
                     localStream = null;
                 }
-                videoElement.srcObject = null;
                 isSharing = false;
-                videoElement.classList.remove('active');
-                videoLabel.classList.add('hidden');
-                setTimeout(() => emptyState.style.display = 'flex', 300);
                 btnShare.classList.remove('active-state');
                 btnShare.classList.add('bg-blue-600', 'border-blue-500');
                 btnShare.innerHTML = '<i class="ph ph-screencast text-3xl"></i>';
                 showToast('Encerrado', 'Compartilhamento parado.');
             }
 
-            // ==========================================
-            // WEBRTC (P2P) - CORRIGIDO
-            // ==========================================
-            function createPeer(targetId) {
-                if (peers[targetId]) {
-                    peers[targetId].close();
-                    delete peers[targetId];
-                }
-                const pc = new RTCPeerConnection(config);
-                peers[targetId] = pc;
-                pc.onicecandidate = (e) => {
-                    if (e.candidate) {
-                        socket.emit('ice-candidate', {
-                            target: targetId,
-                            candidate: e.candidate,
-                            sender: mySessionId
-                        });
-                    }
-                };
-                // CORREÇÃO AQUI:
-                pc.ontrack = (e) => {
-                    console.log('ontrack disparado! Recebendo stream de', targetId, 'tracks:', e.streams[0].getTracks());
-                    const stream = e.streams[0];
-                    // Só atualiza se for um stream diferente
-                    if (videoElement.srcObject !== stream) {
-                        videoElement.srcObject = stream;
-                        videoElement.classList.add('active');
-                        emptyState.style.display = 'none';
-                        // Tenta reproduzir e captura erros
-                        videoElement.play().catch(err => {
-                            console.warn('Erro ao reproduzir:', err);
-                            // Se falhar, tenta novamente após um breve delay
-                            setTimeout(() => videoElement.play().catch(e => console.warn('Falha novamente:', e)), 100);
-                        });
-                    }
-                };
-                if (localStream) {
-                    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-                }
-                return pc;
-            }
-
-            async function createOffer(targetId) {
-                console.log('Criando oferta para', targetId);
-                const pc = createPeer(targetId);
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                socket.emit('offer', {
-                    target: targetId,
-                    sdp: offer,
-                    caller: mySessionId
-                });
-            }
-
-            async function handleOffer(data) {
-                console.log('Manipulando oferta de', data.caller);
-                const pc = createPeer(data.caller);
-                await pc.setRemoteDescription(data.sdp);
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                socket.emit('answer', {
-                    target: data.caller,
-                    sdp: answer,
-                    answerer: mySessionId
-                });
-            }
-
-            async function handleAnswer(data) {
-                console.log('Manipulando answer de', data.answerer);
-                if (peers[data.answerer]) {
-                    await peers[data.answerer].setRemoteDescription(data.sdp);
-                }
-            }
-
-            async function handleCandidate(data) {
-                console.log('Manipulando candidate de', data.sender);
-                if (peers[data.sender]) {
-                    await peers[data.sender].addIceCandidate(new RTCIceCandidate(data.candidate));
-                }
-            }
-
-            // ==========================================
-            // BOTÃO SAIR
-            // ==========================================
             document.getElementById('btn-leave').addEventListener('click', () => {
                 if (isSharing) stopScreenShare();
                 if (window.electronAPI && window.electronAPI.closeApp) {
@@ -557,7 +646,6 @@
                     window.close();
                 }
             });
-
         });
     </script>
 </body>
