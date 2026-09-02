@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
@@ -20,13 +21,19 @@ const roomChannels = new Map(); // roomId -> { text: string[], voice: string[] }
 const roomVoiceMembers = new Map(); // roomId -> Map<canalDeVoz, Set<socketId>>
 const roomBroadcasters = new Map(); // roomId -> Map<canalDeVoz, Set<socketId>>
 const roomMessages = new Map(); // roomId -> Map<canalDeTexto, Array<mensagem>>
+const roomPasswords = new Map(); // roomId -> hash da senha (só existe se a sala tiver senha)
+const roomOwnerTokens = new Map(); // roomId -> token secreto (só quem criou a sala recebe)
 
 function getRoomList() {
-  return Array.from(rooms.keys());
+  return Array.from(rooms.keys()).map(name => ({ name, hasPassword: roomPasswords.has(name) }));
 }
 
 function cleanName(raw, maxLen) {
   return (raw || '').toString().trim().slice(0, maxLen);
+}
+
+function hashPassword(pw) {
+  return crypto.createHash('sha256').update((pw || '').toString()).digest('hex');
 }
 
 function ensureRoomStructures(roomId) {
@@ -58,6 +65,8 @@ function broadcastUserList(roomId) {
     return {
       id,
       name: s?.data.username || 'Anônimo',
+      avatar: s?.data.avatar || null,
+      isOwner: !!s?.data.isOwner,
       voiceChannel,
       isStreaming: voiceChannel ? (broadcasters.get(voiceChannel)?.has(id) || false) : false
     };
@@ -113,16 +122,39 @@ io.on('connection', (socket) => {
     socket.emit('rooms-list', getRoomList());
   });
 
-  socket.on('join-room', ({ roomId, username }) => {
-    if (!rooms.has(roomId)) {
+  socket.on('join-room', ({ roomId, username, avatar, password, ownerToken }) => {
+    const isNewRoom = !rooms.has(roomId);
+
+    if (!isNewRoom && roomPasswords.has(roomId)) {
+      if (hashPassword(password) !== roomPasswords.get(roomId)) {
+        socket.emit('join-error', { reason: 'wrong-password' });
+        return;
+      }
+    }
+
+    if (isNewRoom) {
       rooms.set(roomId, new Set());
+      if (password) roomPasswords.set(roomId, hashPassword(password));
     }
     ensureRoomStructures(roomId);
     rooms.get(roomId).add(socket.id);
     socket.join(roomId);
     socket.data.username = cleanName(username, MAX_NAME_LENGTH) || 'Anônimo';
+    socket.data.avatar = typeof avatar === 'string' ? avatar : null;
     socket.data.room = roomId;
     socket.data.voiceChannel = null;
+
+    // Dono da sala: quem cria recebe um token secreto (guardado só no cliente
+    // dele) que prova a autoria em futuras reconexões — sem isso, qualquer um
+    // que entrasse na sala poderia expulsar/renomear à vontade.
+    if (isNewRoom) {
+      const token = crypto.randomBytes(16).toString('hex');
+      roomOwnerTokens.set(roomId, token);
+      socket.data.isOwner = true;
+      socket.emit('owner-token', { roomId, token });
+    } else {
+      socket.data.isOwner = !!ownerToken && roomOwnerTokens.get(roomId) === ownerToken;
+    }
 
     sendChannelsInfo(roomId);
 
@@ -147,7 +179,15 @@ io.on('connection', (socket) => {
     if (room) broadcastUserList(room);
   });
 
+  socket.on('update-avatar', ({ avatar }) => {
+    const room = socket.data.room;
+    if (!room) return;
+    socket.data.avatar = typeof avatar === 'string' && avatar ? avatar : null;
+    broadcastUserList(room);
+  });
+
   socket.on('rename-room', ({ newName }) => {
+    if (!socket.data.isOwner) return;
     const oldRoom = socket.data.room;
     const trimmed = cleanName(newName, MAX_NAME_LENGTH);
     if (!oldRoom || !trimmed || trimmed === oldRoom || rooms.has(trimmed)) return;
@@ -167,12 +207,15 @@ io.on('connection', (socket) => {
     renameMapKey(roomVoiceMembers, oldRoom, trimmed);
     renameMapKey(roomBroadcasters, oldRoom, trimmed);
     renameMapKey(roomMessages, oldRoom, trimmed);
+    renameMapKey(roomPasswords, oldRoom, trimmed);
+    renameMapKey(roomOwnerTokens, oldRoom, trimmed);
 
     io.to(trimmed).emit('room-renamed', { newName: trimmed });
     io.emit('rooms-update', getRoomList());
   });
 
   socket.on('rename-channel', ({ type, oldName, newName }) => {
+    if (!socket.data.isOwner) return;
     const room = socket.data.room;
     const trimmed = cleanName(newName, MAX_NAME_LENGTH);
     if (!room || !trimmed) return;
@@ -289,6 +332,19 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('kick-user', ({ userId }) => {
+    if (!socket.data.isOwner) return;
+    const room = socket.data.room;
+    if (!room || !userId || userId === socket.id) return;
+    if (!rooms.get(room)?.has(userId)) return;
+
+    const targetSocket = io.sockets.sockets.get(userId);
+    if (!targetSocket) return;
+
+    targetSocket.emit('kicked', { by: socket.data.username });
+    targetSocket.disconnect(true);
+  });
+
   socket.on('offer', ({ target, sdp, caller }) => {
     io.to(target).emit('offer', { caller: socket.id, sdp });
   });
@@ -314,6 +370,8 @@ io.on('connection', (socket) => {
           roomVoiceMembers.delete(room);
           roomBroadcasters.delete(room);
           roomMessages.delete(room);
+          roomPasswords.delete(room);
+          roomOwnerTokens.delete(room);
           io.emit('rooms-update', getRoomList());
         } else {
           broadcastUserList(room);
