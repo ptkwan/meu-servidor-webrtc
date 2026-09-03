@@ -1,36 +1,15 @@
 {
-  "name": "screenshare-pro",
+  "name": "meu-servidor-webrtc",
   "version": "1.0.0",
-  "description": "App de compartilhamento de tela em rede local",
-  "main": "main.js",
+  "description": "Backend de sinalização WebSocket/WebRTC + persistência do Streama AI (deploy no Render)",
+  "main": "server.js",
   "scripts": {
-    "start": "electron .",
-    "server": "node server.js",
-    "dev": "concurrently \"npm run server\" \"npm run start\"",
-    "build": "electron-builder"
-  },
-  "build": {
-    "appId": "com.seu-nome.screensharepro",
-    "productName": "ScreenShare Pro",
-    "win": {
-      "target": "nsis",
-      "icon": "icon.ico"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
-    }
+    "start": "node server.js"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.3",
-    "concurrently": "^8.2.2",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "socket.io": "^4.6.1"
-  },
-  "devDependencies": {
-    "electron": "^24.0.0",
-    "electron-builder": "^24.4.0"
   }
 }
